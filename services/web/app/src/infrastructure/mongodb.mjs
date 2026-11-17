@@ -71,6 +71,7 @@ function libraryCollection(name) {
 }
 
 export const db = {
+  botTokens: internalDb.collection('botTokens'),
   contacts: internalDb.collection('contacts'),
   deletedProjects: internalDb.collection('deletedProjects'),
   deletedSubscriptions: internalDb.collection('deletedSubscriptions'),

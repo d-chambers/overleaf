@@ -1225,6 +1225,10 @@ module.exports = {
         __dirname,
         '../modules/zotero/frontend/js/components/zotero-integration-card.tsx'
       ),
+      Path.resolve(
+        __dirname,
+        '../modules/bot-access/frontend/js/components/bot-integration-card.tsx'
+      ),
     ],
     referenceSearchSetting: [],
     settingsModalEditorTabSections: [],
@@ -1260,6 +1264,7 @@ module.exports = {
     'template-gallery',
     'git-bridge',
     'token-api',
+    'bot-access', // after token-api (shares its review logic)
     'git-sync/github',
     'git-sync/gitlab',
     'git-sync/gitea',
