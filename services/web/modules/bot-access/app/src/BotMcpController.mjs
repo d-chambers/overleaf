@@ -1,7 +1,7 @@
 // Minimal MCP server over Streamable HTTP (JSON responses only, stateless).
 // https://modelcontextprotocol.io/specification/2025-06-18/basic/transports
 import logger from '@overleaf/logger'
-import { TOOL_DEFINITIONS, ToolError, callTool } from './BotTools.mjs'
+import { ToolError, callTool, enabledToolDefinitions } from './BotTools.mjs'
 
 const SUPPORTED_VERSIONS = ['2025-06-18', '2025-03-26', '2024-11-05']
 const LATEST_VERSION = SUPPORTED_VERSIONS[0]
@@ -78,14 +78,14 @@ async function handleRequest(bot, msg) {
     case 'ping':
       return rpcResult(id, {})
     case 'tools/list':
-      return rpcResult(id, { tools: TOOL_DEFINITIONS })
+      return rpcResult(id, { tools: enabledToolDefinitions() })
     case 'tools/call': {
       const name = params?.name
       const args = params?.arguments ?? {}
       if (typeof name !== 'string' || typeof args !== 'object' || Array.isArray(args)) {
         return rpcError(id, INVALID_PARAMS, 'tools/call needs a tool name and an arguments object')
       }
-      if (!TOOL_DEFINITIONS.some(t => t.name === name)) {
+      if (!enabledToolDefinitions().some(t => t.name === name)) {
         return rpcError(id, INVALID_PARAMS, `unknown tool: ${name}`)
       }
       try {

@@ -71,3 +71,14 @@ Stateless JSON responses (no SSE stream, no `Mcp-Session-Id`); `GET` and
 other methods answer `405`. Supported protocol versions: 2025-06-18,
 2025-03-26, 2024-11-05. Tool failures the bot can fix are returned as tool
 results with `isError: true`.
+
+## Compile is opt-in
+
+The `compile` tool is only offered when `OVERLEAF_BOT_ALLOW_COMPILE=true`.
+TeX's `openin_any` setting does not confine `\input`/`\openin` in this image
+(tested), so a compile can read any file the compile process can read, and the
+log comes back to the bot. A bot acts on text it reads, so an instruction
+planted in a document or comment could make it exfiltrate other projects'
+files this way. Leave it off unless every collaborator on projects you connect
+bots to is trusted.
+

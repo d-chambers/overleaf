@@ -477,10 +477,20 @@ const handlers = {
   },
 }
 
+// compile is opt-in: TeX can read any file the compile process can read
+// (\input{/abs/path}), and a bot acts on text it reads, so a planted
+// instruction could make it leak other projects' files through the log.
+export const COMPILE_ENABLED = process.env.OVERLEAF_BOT_ALLOW_COMPILE === 'true'
+
+export function enabledToolDefinitions() {
+  return TOOL_DEFINITIONS.filter(t => COMPILE_ENABLED || t.name !== 'compile')
+}
+
 export async function callTool(ctx, name, args) {
+  if (name === 'compile' && !COMPILE_ENABLED) return null
   const handler = Object.hasOwn(handlers, name) ? handlers[name] : null
   if (!handler) return null
   return await handler(ctx, args ?? {})
 }
 
-export default { TOOL_DEFINITIONS, callTool, ToolError }
+export default { TOOL_DEFINITIONS, enabledToolDefinitions, callTool, ToolError }
