@@ -15,6 +15,11 @@ if (enableRegistrationPage) {
 
   Settings.enableRegistrationPage = true
 
+  // For deployments without email (e.g. a trusted private network): send the
+  // new user straight to the set-password page instead of emailing the link.
+  Settings.registrationShowActivationLink =
+    boolFromEnv(process.env.OVERLEAF_REGISTRATION_SHOW_ACTIVATION_LINK) === true
+
   if (process.env.OVERLEAF_ALLOWED_REGISTRATION_EMAIL_DOMAINS) {
     Settings.allowedRegistrationEmailDomains = process.env.OVERLEAF_ALLOWED_REGISTRATION_EMAIL_DOMAINS
       .split(/[,\s]+/)

@@ -82,6 +82,9 @@ async function registerNewUser(req, res, next) {
   try {
     const userDetails = { email, first_name, last_name }
     const success = await registerNewUserAndSendActivationEmail(userDetails)
+    if (success?.setNewPasswordUrl) {
+      return res.status(200).json({ redir: success.setNewPasswordUrl })
+    }
     if (success) {
       return res.status(200).json({ message: t('register_success') })
     } else {

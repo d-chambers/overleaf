@@ -30,6 +30,10 @@ export default async function registerNewUserAndSendActivationEmail(userData) {
 
     const setNewPasswordUrl = `${settings.siteUrl}/user/activate?token=${token}&user_id=${user._id}`
 
+    if (settings.registrationShowActivationLink) {
+      return { setNewPasswordUrl }
+    }
+
     await EmailHandler.promises.sendEmail('registered', {
       to: user.email,
       setNewPasswordUrl,
@@ -47,5 +51,5 @@ export default async function registerNewUserAndSendActivationEmail(userData) {
     throw error
   }
 
-  return true
+  return {}
 }
