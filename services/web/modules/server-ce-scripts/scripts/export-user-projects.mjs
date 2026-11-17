@@ -96,7 +96,9 @@ async function exportUserProjectsToZip(userId, output) {
     `Exporting ${allIds.length} projects for user ${userId} to ${output}`
   )
 
-  const zipStream = await createZipStreamForMultipleProjectsAsync(allIds, false, null)
+  // createZipStreamForMultipleProjects(projectIds, zipFromHistory, callback):
+  // no historyId argument (unlike createZipStreamForProject).
+  const zipStream = await createZipStreamForMultipleProjectsAsync(allIds, false)
 
   zipStream.on('progress', progress => {
     updateProgress(progress.entries.total, allIds.length)
