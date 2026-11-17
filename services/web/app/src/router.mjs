@@ -218,6 +218,29 @@ const statusCompilerSchema = z.object({
 async function initialize(webRouter, privateApiRouter, publicApiRouter) {
   webRouter.use(unsupportedBrowserMiddleware)
 
+  if (Settings.disablePasswordLogin) {
+    // Every path that logs in with, creates, resets or sets a password.
+    const passwordPaths = new Set([
+      '/login', // GET stays allowed: it shows the SSO button
+      '/register',
+      '/user/activate',
+      '/user/password/reset',
+      '/user/password/set',
+      '/user/password/update',
+      '/launchpad/register_admin',
+      '/launchpad/register_ldap_admin',
+      '/launchpad/register_saml_admin',
+    ])
+    webRouter.use((req, res, next) => {
+      if (!passwordPaths.has(req.path)) return next()
+      if (req.path === '/login' && req.method === 'GET') return next()
+      if (req.method === 'GET') return res.redirect('/login')
+      return res
+        .status(403)
+        .json({ message: 'Password login is disabled on this server.' })
+    })
+  }
+
   if (!Settings.allowPublicAccess) {
     webRouter.all('*', AuthenticationController.requireGlobalLogin)
   }

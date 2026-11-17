@@ -1293,6 +1293,10 @@ module.exports = {
 
   enablePandocConversions: process.env.ENABLE_PANDOC_CONVERSIONS === 'true',
 
+  // Single sign-on only: no password logins, password resets, self-registration
+  // or password-based account activation.
+  disablePasswordLogin: process.env.OVERLEAF_DISABLE_PASSWORD_LOGIN === 'true',
+
   oauthProviders: {
     ...(process.env.EXTERNAL_AUTH && process.env.EXTERNAL_AUTH.includes('oidc') && {
       [process.env.OVERLEAF_OIDC_PROVIDER_ID || 'oidc']: {
