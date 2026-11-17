@@ -4,7 +4,9 @@ const blockedNetworks = (process.env.OVERLEAF_LINKED_URL_BLOCKED_NETWORKS || '')
   .map(cidr => cidr.trim())
 
 const allowedResources = process.env.OVERLEAF_LINKED_URL_ALLOWED_RESOURCES
-  ? new RegExp(process.env.OVERLEAF_LINKED_URL_ALLOWED_RESOURCES)
+  ? // anchored at the start so the pattern can't be satisfied by text placed
+    // in the query string or path of an otherwise-blocked URL
+    new RegExp(`^(?:${process.env.OVERLEAF_LINKED_URL_ALLOWED_RESOURCES})`)
   : null
 
 module.exports = {

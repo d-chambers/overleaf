@@ -53,13 +53,16 @@ async function createTemplateFromProject({ projectId, userId, templateSource }) 
   validateTemplateInput(templateSource)
   let template = await Template.findOne({ name: templateSource.name }).exec()
 
-  if (template && !templateSource.override) {
+  if (template) {
+    // Always check ownership: the client-supplied `override` flag must not
+    // let a user replace someone else's template.
     const { canOverride, templateOwnerName } = await canUserOverrideTemplate(template, userId)
-
-    return {
-      conflict: true,
-      canOverride,
-      templateOwnerName
+    if (!(templateSource.override && canOverride)) {
+      return {
+        conflict: true,
+        canOverride,
+        templateOwnerName
+      }
     }
   }
 
@@ -92,6 +95,10 @@ async function createTemplateFromProject({ projectId, userId, templateSource }) 
 async function fetchTemplatePreview({ templateId, version, style }) {
   if (!templateId || !version) {
     throw new OError('Template ID and version are required', { status: 404 })
+  }
+  // Both values are interpolated into an internal filestore URL path.
+  if (!/^[0-9a-f]{24}$/.test(String(templateId)) || !/^[0-9]+$/.test(String(version))) {
+    throw new OError('Invalid template ID or version', { status: 404 })
   }
   const styleParam = style ? `style=${style}` : ''
   const isImage = (style === 'preview' || style === 'thumbnail')

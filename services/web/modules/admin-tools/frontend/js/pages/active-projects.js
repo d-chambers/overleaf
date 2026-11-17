@@ -44,6 +44,17 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 })
 
+// Project names, user names and emails are user-controlled: escape before
+// interpolating into HTML.
+function escapeHtml(value) {
+  return String(value ?? '')
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
+}
+
 function renderTable(data) {
   if (!Array.isArray(data) || data.length === 0) {
     return `
@@ -61,11 +72,12 @@ function renderTable(data) {
     const mailto = users
       .map(u => u.email)
       .filter(Boolean)
+      .map(e => encodeURIComponent(e))
       .join(',')
 
     const projectName = mailto
-      ? `<a href="mailto:${mailto}" style="text-decoration:none;">${project.name}</a>`
-      : project.name
+      ? `<a href="mailto:${escapeHtml(mailto)}" style="text-decoration:none;">${escapeHtml(project.name)}</a>`
+      : escapeHtml(project.name)
 
     const stripedStyle = projectIndex % 2 === 1
       ? 'background-color: var(--bs-table-striped-bg);'
@@ -76,8 +88,8 @@ function renderTable(data) {
           <div>
             ${
               user.email
-                ? `<a href="mailto:${user.email}" style="text-decoration:none;">${user.name}</a>`
-                : user.name
+                ? `<a href="mailto:${escapeHtml(encodeURIComponent(user.email))}" style="text-decoration:none;">${escapeHtml(user.name)}</a>`
+                : escapeHtml(user.name)
             }
           </div>
         `).join('')
@@ -103,7 +115,7 @@ function renderTable(data) {
 
   return `
     <p class="small">
-      <strong>${data.length}</strong> project(s) currently being edited
+      <strong>${Number(data.length)}</strong> project(s) currently being edited
     </p>
 
     <div style="

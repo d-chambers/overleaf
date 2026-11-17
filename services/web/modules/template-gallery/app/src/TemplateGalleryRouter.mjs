@@ -5,6 +5,7 @@ import RateLimiterMiddleware from '../../../../app/src/Features/Security/RateLim
 import { RateLimiter } from '../../../../app/src/infrastructure/RateLimiter.mjs'
 import TemplateGalleryController from './TemplateGalleryController.mjs'
 import TemplateAuthorizationMiddleware from './TemplateAuthorizationMiddleware.mjs'
+import AuthorizationMiddleware from '../../../../app/src/Features/Authorization/AuthorizationMiddleware.mjs'
 
 const rateLimiterNewTemplate = new RateLimiter('create-template-from-project', {
   points: 20,
@@ -29,6 +30,7 @@ export default {
       AuthenticationController.requireLogin(),
       RateLimiterMiddleware.rateLimit(rateLimiterNewTemplate),
       TemplateAuthorizationMiddleware.ensureTemplateManagementAccess,
+      AuthorizationMiddleware.ensureUserCanReadProject,
       TemplateGalleryController.createTemplateFromProject
     )
 

@@ -7,7 +7,8 @@ import { Transform } from 'node:stream'
 import logger from '@overleaf/logger'
 import Settings from '@overleaf/settings'
 import { fetchStreamWithResponse, RequestFailedError } from '@overleaf/fetch-utils'
-import { Agent } from 'undici'
+import http from 'node:http'
+import https from 'node:https'
 
 function isAllowedResource(targetUrl) {
   if (!Settings.allowedResources) return false
@@ -93,14 +94,26 @@ async function validateAndFetch(rawUrl, redirectCount = 0) {
   // check DNS and allowed resources
   const validatedIp = await checkUrlAccess(url.hostname, normalizedUrl)
 
-  // pin fetch to validated IP to prevent DNS rebinding
-  const agent = new Agent({
-    connect: {
-      lookup(hostname, opts, cb) {
-        cb(null, validatedIp, 4)
-      }
+  // Pin the connection to the validated IP to prevent DNS rebinding.
+  // @overleaf/fetch-utils uses node-fetch, which honours `agent` (not undici's
+  // `dispatcher`), so pin via a node http(s) Agent with a fixed lookup.
+  // TLS still verifies the certificate against the URL hostname (SNI).
+  const validatedFamily = ipaddr.parse(validatedIp).kind() === 'ipv6' ? 6 : 4
+  const pinnedLookup = (hostname, lookupOpts, cb) => {
+    if (typeof lookupOpts === 'function') {
+      cb = lookupOpts
+      lookupOpts = {}
     }
-  })
+    if (lookupOpts?.all) {
+      cb(null, [{ address: validatedIp, family: validatedFamily }])
+    } else {
+      cb(null, validatedIp, validatedFamily)
+    }
+  }
+  const agent =
+    url.protocol === 'https:'
+      ? new https.Agent({ lookup: pinnedLookup })
+      : new http.Agent({ lookup: pinnedLookup })
 
   const opts = {
     redirect: 'manual',
@@ -109,7 +122,7 @@ async function validateAndFetch(rawUrl, redirectCount = 0) {
   }
 
   try {
-    const { stream, response } = await fetchStreamWithResponse(normalizedUrl, { ...opts, dispatcher: agent })
+    const { stream, response } = await fetchStreamWithResponse(normalizedUrl, { ...opts, agent })
 
     const contentLengthHeader = response.headers.get('content-length')
     if (contentLengthHeader) {

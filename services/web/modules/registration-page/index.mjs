@@ -5,9 +5,9 @@ let RegistrationPageModule = {}
 
 let enableRegistrationPage = boolFromEnv(process.env.OVERLEAF_ENABLE_REGISTRATION_PAGE)
 
-// if the env var is not set, enable registration page iff the external authentication is not enabled
+// Self-registration is opt-in: only enabled when OVERLEAF_ENABLE_REGISTRATION_PAGE=true.
 if (enableRegistrationPage === undefined) {
-  enableRegistrationPage = !(Settings.ldap?.enable || Settings.saml?.enable || Settings.oidc?.enable)
+  enableRegistrationPage = false
 }
 
 if (enableRegistrationPage) {

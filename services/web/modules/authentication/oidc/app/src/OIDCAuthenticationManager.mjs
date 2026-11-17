@@ -18,10 +18,18 @@ const OIDCAuthenticationManager = {
     const oidcUserId = (attUserId === 'email') ? email : profile[attUserId]
     const firstName = profile.name?.givenName || ""
     const lastName  = profile.name?.familyName || ""
+    // Only trust the email claim for account matching/creation/admin if the IdP
+    // marks it verified (or the operator explicitly opts out for IdPs that
+    // don't send email_verified).
+    const emailVerifiedClaim = profile._json?.email_verified
+    const emailVerified =
+      emailVerifiedClaim === true ||
+      emailVerifiedClaim === 'true' ||
+      process.env.OVERLEAF_OIDC_TRUST_UNVERIFIED_EMAIL === 'true'
     let isAdmin = false
     if (attAdmin && valAdmin) {
       if (attAdmin === 'email') {
-        isAdmin = (email === valAdmin)
+        isAdmin = emailVerified && (email === valAdmin)
       } else {
         const adminClaim = profile[attAdmin] || profile._json?.[attAdmin]
         isAdmin = (adminClaim === valAdmin)
@@ -37,7 +45,18 @@ const OIDCAuthenticationManager = {
 // If a user exists but no account from the specified OIDC provider is linked to this user, link the OIDC account to this user.
 // If an account from the specified provider is already linked to this user, unlink it, and link the OIDC account to this user.
 // (Is it safe? Concider: If an account from the specified provider is already linked to this user, throw an error)
+      if (!emailVerified) {
+        return null
+      }
       user = await User.findOne({ 'email': email }).exec()
+      if (
+        user &&
+        user.thirdPartyIdentifiers?.some(item => item.providerId === providerId)
+      ) {
+        // Already linked to a different identity at this provider: refuse
+        // rather than silently re-linking (account takeover).
+        return null
+      }
       if (!user) {
         const allowedDomains = Settings.oidc.allowedOIDCEmailDomains
         if (

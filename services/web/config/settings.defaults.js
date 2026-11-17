@@ -1308,7 +1308,11 @@ module.exports = {
 
   splitTestOverrides: {
     'themed-modals': 'enabled',
-    'overleaf-code': 'enabled',
+    // Python runner executes project code in the viewer's browser with their
+    // session; keep it opt-in.
+    ...(process.env.OVERLEAF_ENABLE_PYTHON_RUNNER === 'true'
+      ? { 'overleaf-code': 'enabled' }
+      : {}),
     'editor-tabs': 'enabled',
     'writefull-toolbar-migration': 'enabled',
     ...(process.env.ENABLE_PANDOC_CONVERSIONS === 'true' ? {

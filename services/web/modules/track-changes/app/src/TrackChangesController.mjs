@@ -2,6 +2,8 @@ import ChatApiHandler from '../../../../app/src/Features/Chat/ChatApiHandler.mjs
 import ChatManager from '../../../../app/src/Features/Chat/ChatManager.mjs'
 import EditorRealTimeController from '../../../../app/src/Features/Editor/EditorRealTimeController.mjs'
 import SessionManager from '../../../../app/src/Features/Authentication/SessionManager.mjs'
+import AuthorizationManager from '../../../../app/src/Features/Authorization/AuthorizationManager.mjs'
+import TokenAccessHandler from '../../../../app/src/Features/TokenAccess/TokenAccessHandler.mjs'
 import UserInfoManager from '../../../../app/src/Features/User/UserInfoManager.mjs'
 import UserInfoController from '../../../../app/src/Features/User/UserInfoController.mjs'
 import DocstoreManager from '../../../../app/src/Features/Docstore/DocstoreManager.mjs'
@@ -112,7 +114,22 @@ const TrackChangesController = {
   async deleteMessage(req, res, next) {
     try {
       const { project_id, thread_id, message_id } = req.params
-      await ChatApiHandler.promises.deleteMessage(project_id, thread_id, message_id)
+      const user_id = SessionManager.getLoggedInUserId(req.session)
+      const token = TokenAccessHandler.getRequestToken(req, project_id)
+      const canWrite =
+        await AuthorizationManager.promises.canUserWriteProjectContent(
+          user_id,
+          project_id,
+          token
+        )
+      if (canWrite) {
+        // editors may moderate any message
+        await ChatApiHandler.promises.deleteMessage(project_id, thread_id, message_id)
+      } else {
+        // reviewers may only delete their own messages
+        if (!user_id) throw new Error('no logged-in user')
+        await ChatApiHandler.promises.deleteUserMessage(project_id, thread_id, user_id, message_id)
+      }
       EditorRealTimeController.emitToRoom(project_id, 'delete-message', thread_id, message_id)
       res.sendStatus(204)
     } catch (err) {
