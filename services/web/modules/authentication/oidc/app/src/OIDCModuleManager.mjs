@@ -4,6 +4,7 @@ import { boolFromEnv } from '../../../utils.mjs'
 import PermissionsManager from '../../../../../app/src/Features/Authorization/PermissionsManager.mjs'
 import OIDCAuthenticationController from './OIDCAuthenticationController.mjs'
 import { Strategy as OIDCStrategy } from 'passport-openidconnect'
+import https from 'node:https'
 
 const OIDCModuleManager = {
   initSettings() {
@@ -32,6 +33,14 @@ const OIDCModuleManager = {
       callbackURL: `${Settings.siteUrl.replace(/\/+$/, '')}/oidc/login/callback`,
       scope: process.env.OVERLEAF_OIDC_SCOPE || 'openid profile email',
       passReqToCallback: true,
+    }
+    // Optional: send server-to-provider requests (token + userinfo) through an
+    // allow-listing HTTPS proxy, so the app container needs no direct egress.
+    if (process.env.OVERLEAF_OIDC_HTTPS_PROXY) {
+      oidcOptions.agent = new https.Agent({
+        keepAlive: true,
+        proxyEnv: { HTTPS_PROXY: process.env.OVERLEAF_OIDC_HTTPS_PROXY },
+      })
     }
     try {
       passport.use(

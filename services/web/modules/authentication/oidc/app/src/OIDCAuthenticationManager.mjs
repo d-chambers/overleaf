@@ -57,6 +57,15 @@ const OIDCAuthenticationManager = {
         // rather than silently re-linking (account takeover).
         return null
       }
+      if (user && process.env.OVERLEAF_OIDC_LINK_EXISTING_BY_EMAIL !== 'true') {
+        // An existing account (e.g. self-registered, email not verified by this
+        // server) has this email. Auto-linking would let whoever created that
+        // account receive the IdP user's login. Require linking from Account
+        // Settings while logged in instead.
+        throw new Error(
+          'An account with this email already exists. Log in with your password, then link it under Account Settings.'
+        )
+      }
       if (!user) {
         const allowedDomains = Settings.oidc.allowedOIDCEmailDomains
         if (
