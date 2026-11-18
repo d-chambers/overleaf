@@ -181,9 +181,9 @@ export default function BotAccessModal({
             <p>
               A connected bot can read this project&apos;s text files, edit them
               (as <strong>tracked changes</strong> unless you ask it to edit
-              directly), create new text files, comment and reply to comments.
-              It cannot accept changes, delete files, upload images, change
-              settings, or see other projects.
+              directly), create new text files, upload images and PDFs, comment
+              and reply to comments. It cannot accept changes, delete files,
+              change settings, or see other projects.
             </p>
 
             <form onSubmit={handleCreate}>

@@ -6,6 +6,7 @@ import { RateLimiter } from '../../../../app/src/infrastructure/RateLimiter.mjs'
 import botTokenAuth, { checkOrigin, creatorCanEdit } from './BotAuthMiddleware.mjs'
 import BotAccessController from './BotAccessController.mjs'
 import BotMcpController from './BotMcpController.mjs'
+import BotUploadController from './BotUploadController.mjs'
 
 const ID_REGEX = /^[0-9a-f]{24}$/
 
@@ -14,6 +15,8 @@ const mcpIpLimiter = new RateLimiter('bot-access-mcp-ip', { points: 600, duratio
 // Authenticated calls, per bot.
 const mcpBotLimiter = new RateLimiter('bot-access-mcp-bot', { points: 120, duration: 60 })
 const manageLimiter = new RateLimiter('bot-access-manage', { points: 30, duration: 60 })
+// One-time upload links (prepare_upload), per IP.
+const uploadLimiter = new RateLimiter('bot-access-upload', { points: 60, duration: 60 })
 
 // Owners and editors of the project (invited or via an edit link); never
 // site admins by virtue of being admins.
@@ -59,5 +62,13 @@ export default {
       BotMcpController.post
     )
     publicApiRouter.all('/api/v1/bot/mcp', BotMcpController.methodNotAllowed)
+
+    // Raw-body upload to a one-time link from the prepare_upload tool.
+    publicApiRouter.put(
+      '/api/v1/bot/upload/:ticket',
+      RateLimiterMiddleware.rateLimit(uploadLimiter, { ipOnly: true }),
+      checkOrigin,
+      BotUploadController.upload
+    )
   },
 }

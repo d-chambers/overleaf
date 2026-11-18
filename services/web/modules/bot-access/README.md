@@ -5,7 +5,8 @@ over [MCP](https://modelcontextprotocol.io) (Streamable HTTP) at
 `POST /api/v1/bot/mcp`. By default its edits are **tracked changes** that a
 human reviews; it is instructed to edit directly (`track_changes: false`) only
 when the user explicitly asks, and it can create new text files. It cannot
-accept, reject or resolve changes, upload binaries, or delete files.
+accept, reject or resolve changes, or delete files. Images and PDFs are uploaded
+through single-use links from `prepare_upload`.
 
 Enable with `OVERLEAF_BOT_ACCESS_ENABLED=true`.
 
@@ -33,6 +34,7 @@ have at most 10 bots.
 | `read_file` | `path`, `start_line?`, `end_line?` | Current text with line numbers and doc version, at most 2000 lines per call. Pending tracked insertions are included, pending deletions are not. |
 | `edit_file` | `path`, `old_text`, `new_text`, `track_changes?` (default `true`), `comment?` | Replaces the single occurrence of `old_text` with `new_text`: as a tracked change by the bot, or directly when `track_changes` is `false`. Refused if `old_text` is missing or ambiguous, or if the doc changed between read and write. |
 | `create_file` | `path`, `content` | Creates a new text file (`.tex`, `.bib`, `.sty`, ...; folders as needed) directly. Never overwrites; binaries are not allowed. |
+| `prepare_upload` | `path`, `overwrite?` (default `false`) | Returns a one-time link and `curl` command to upload a binary file (`.png`, `.jpg`, `.pdf`, `.svg`, `.eps`, ...) to that path. The bot PUTs the raw file there (`Content-Type: application/octet-stream`); bytes never pass through the model. The link is bound to this bot, project and path, works once, expires after 10 minutes, and is checked again on upload (bot not revoked, creator can still edit, path still free, file starts with the right signature, at most `MAX_UPLOAD_SIZE`). |
 | `comment` | `path`, `quote`, `text` | Review comment anchored to the single occurrence of `quote`. |
 | `reply` | `thread_id`, `text` | Reply to a comment thread of this project. |
 | `list_review` | `include_resolved?` | Comment threads (with ids) and pending tracked changes, as Markdown. |

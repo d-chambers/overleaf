@@ -9,6 +9,7 @@ import CompileManager from '../../../../app/src/Features/Compile/CompileManager.
 import DocumentUpdaterHandler from '../../../../app/src/Features/DocumentUpdater/DocumentUpdaterHandler.mjs'
 import EditorController from '../../../../app/src/Features/Editor/EditorController.mjs'
 import SafePath from '../../../../app/src/Features/Project/SafePath.mjs'
+import BotUploadManager, { TICKET_TTL_MS } from './BotUploadManager.mjs'
 import ProjectEntityHandler from '../../../../app/src/Features/Project/ProjectEntityHandler.mjs'
 import ProjectGetter from '../../../../app/src/Features/Project/ProjectGetter.mjs'
 import LatexParser from '../../../../frontend/js/ide/log-parser/latex-log-parser.ts'
@@ -35,6 +36,10 @@ const MAX_NEW_FILE = 512 * 1024
 const TEXT_EXTENSIONS = new Set([
   'tex', 'bib', 'bst', 'cls', 'sty', 'clo', 'cfg', 'def', 'dtx', 'ins', 'ist',
   'bbx', 'cbx', 'lbx', 'txt', 'md', 'csv', 'tsv', 'dat', 'json', 'yaml', 'yml', 'tikz',
+])
+// prepare_upload / the upload endpoint: binary files for figures.
+export const BINARY_EXTENSIONS = new Set([
+  'png', 'jpg', 'jpeg', 'gif', 'pdf', 'eps', 'ps', 'svg', 'tif', 'tiff', 'bmp', 'webp',
 ])
 const MAX_REVIEW_CHARS = 100 * 1024
 const MAX_LOG_BYTES = 4 * 1024 * 1024
@@ -114,6 +119,36 @@ async function resolveDoc(projectId, rawPath) {
     )
   }
   throw new ToolError(`No file "${path}" in this project. Use list_files to see the files.`)
+}
+
+// Validates a path for a NEW entity: plain relative path, names Overleaf
+// accepts, and an extension from `extensions`. Returns { path, ext }.
+export function checkNewFilePath(rawPath, extensions) {
+  const path = normalisePath(rawPath)
+  const parts = path.split('/')
+  if (path.endsWith('/') || parts.some(p => p === '' || p === '.' || p === '..')) {
+    throw new ToolError('path must be a plain project-relative file path such as "references.bib" or "figures/plot.png".')
+  }
+  if (!SafePath.isCleanPath(path) || !parts.every(p => SafePath.isCleanFilename(p))) {
+    throw new ToolError('path contains characters Overleaf does not allow in file names.')
+  }
+  const name = parts.at(-1)
+  const ext = name.includes('.') ? name.split('.').pop().toLowerCase() : ''
+  if (!extensions.has(ext)) {
+    throw new ToolError(`Allowed file types here: ${[...extensions].map(e => '.' + e).join(', ')}.`)
+  }
+  return { path, ext }
+}
+
+// What already occupies `path` in the project: 'doc', 'file', 'folder'
+// (a folder, or a file in the way of a parent folder), or null.
+export async function pathOccupant(projectId, path) {
+  const { docs, files } = await getEntities(projectId)
+  if (docs.some(d => d.path === path)) return 'doc'
+  if (files.some(f => f.path === path)) return 'file'
+  const taken = [...docs, ...files].map(e => e.path)
+  if (taken.some(t => t.startsWith(path + '/') || path.startsWith(t + '/'))) return 'folder'
+  return null
 }
 
 function requireString(value, name, { max, allowEmpty = false } = {}) {
@@ -207,6 +242,20 @@ export const TOOL_DEFINITIONS = [
         content: { type: 'string', description: 'Full content of the new file.' },
       },
       required: ['path', 'content'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'prepare_upload',
+    description:
+      'Get a one-time link to upload a binary file (image or PDF, e.g. a figure) into the project. Then upload the local file with the exact curl command returned; the file content never goes through this tool. The link works once, for this path only, and expires after 10 minutes. Existing files are only replaced when overwrite is true, which you should only use when the user asked to replace that file.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Project-relative destination, e.g. "figures/borehole-layout.png".' },
+        overwrite: { type: 'boolean', description: 'Replace an existing file at this path (default false).' },
+      },
+      required: ['path'],
       additionalProperties: false,
     },
   },
@@ -405,26 +454,13 @@ const handlers = {
   },
 
   async create_file(ctx, args) {
-    const path = normalisePath(args.path)
     const content = requireString(args.content, 'content', { max: MAX_NEW_FILE, allowEmpty: true })
-    const parts = path.split('/')
-    if (path.endsWith('/') || parts.some(p => p === '' || p === '.' || p === '..')) {
-      throw new ToolError('path must be a plain project-relative file path such as "references.bib" or "chapters/intro.tex".')
-    }
-    if (!SafePath.isCleanPath(path) || !parts.every(p => SafePath.isCleanFilename(p))) {
-      throw new ToolError('path contains characters Overleaf does not allow in file names.')
-    }
-    const ext = parts.at(-1).includes('.') ? parts.at(-1).split('.').pop().toLowerCase() : ''
-    if (!TEXT_EXTENSIONS.has(ext)) {
-      throw new ToolError(`create_file only makes text files (${[...TEXT_EXTENSIONS].map(e => '.' + e).join(', ')}).`)
-    }
-    const { docs, files } = await getEntities(ctx.projectId)
-    const taken = [...docs, ...files].map(e => e.path)
-    if (taken.includes(path)) {
+    const { path } = checkNewFilePath(args.path, TEXT_EXTENSIONS)
+    const occupant = await pathOccupant(ctx.projectId, path)
+    if (occupant === 'doc' || occupant === 'file') {
       throw new ToolError(`"${path}" already exists. Use edit_file to change it.`)
     }
-    // A file may not share its path with a folder, nor sit under a file.
-    if (taken.some(t => t.startsWith(path + '/') || path.startsWith(t + '/'))) {
+    if (occupant === 'folder') {
       throw new ToolError(`"${path}" conflicts with an existing file or folder.`)
     }
     await EditorController.promises.upsertDocWithPath(
@@ -435,6 +471,40 @@ const handlers = {
       ctx.botUserId
     )
     return `Created ${path} (${content.split('\n').length} lines).`
+  },
+
+  async prepare_upload(ctx, args) {
+    if (args.overwrite != null && typeof args.overwrite !== 'boolean') {
+      throw new ToolError('overwrite must be true or false.')
+    }
+    const overwrite = args.overwrite === true
+    const { path } = checkNewFilePath(args.path, BINARY_EXTENSIONS)
+    const occupant = await pathOccupant(ctx.projectId, path)
+    if (occupant === 'doc') {
+      throw new ToolError(`"${path}" is a text file; edit it with edit_file instead.`)
+    }
+    if (occupant === 'folder') {
+      throw new ToolError(`"${path}" conflicts with an existing file or folder.`)
+    }
+    if (occupant === 'file' && !overwrite) {
+      throw new ToolError(`"${path}" already exists. Pass overwrite: true only if the user asked to replace it.`)
+    }
+    const { ticket } = await BotUploadManager.create({
+      botId: ctx.botId,
+      projectId: ctx.projectId,
+      botUserId: ctx.botUserId,
+      path,
+      overwrite,
+    })
+    const url = `${Settings.siteUrl.replace(/\/+$/, '')}/api/v1/bot/upload/${ticket}`
+    const minutes = Math.round(TICKET_TTL_MS / 60000)
+    return [
+      `Upload link for ${path} (single use, expires in ${minutes} minutes). Run this, replacing LOCAL_FILE with the path of the file on this machine:`,
+      '',
+      `curl -sS --fail-with-body -X PUT -H 'Content-Type: application/octet-stream' --data-binary @LOCAL_FILE '${url}'`,
+      '',
+      `On success it prints {"ok":true,...}. Then reference it in LaTeX, e.g. \\includegraphics{${path}}.`,
+    ].join('\n')
   },
 
   async comment(ctx, args) {

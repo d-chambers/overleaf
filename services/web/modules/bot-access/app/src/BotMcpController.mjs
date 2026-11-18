@@ -10,6 +10,7 @@ const SERVER_INFO = { name: 'overleaf-bot-access', version: '1.0.0' }
 const INSTRUCTIONS = `You are connected to one Overleaf project as a bot.
 - Edit with edit_file. Keep track_changes true (the default) so a human reviews every change in the review panel. Set track_changes to false only when the user has explicitly asked you to edit directly.
 - create_file adds a new text file directly (it cannot overwrite). Only create files the user asked for or the requested work clearly needs.
+- To add an image or PDF (e.g. a figure), call prepare_upload and run the curl command it returns with the local file. Only replace existing files (overwrite) when the user asked.
 - Always read_file before edit_file, and copy old_text exactly (without the line-number prefixes).
 - Keep each suggestion small and focused; explain non-obvious changes with the comment argument.
 - Use list_review to see open comments and pending changes, and reply to threads addressed to you.
