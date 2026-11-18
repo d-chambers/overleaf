@@ -12,7 +12,7 @@ Enable with `OVERLEAF_BOT_ACCESS_ENABLED=true`.
 
 ## Connecting a bot
 
-1. Open the project → **Integrations** (left rail) → **Bot** → **Connect bot**.
+1. Open the project → click **Bot** (robot icon, left rail, just below Help) → **Connect bot**.
 2. Name the bot (its changes and comments appear as "<name> (bot)").
 3. Copy the command shown once, e.g. for Claude Code:
 

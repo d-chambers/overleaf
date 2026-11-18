@@ -31,6 +31,7 @@ export type RailModalKey =
   | 'contact-us'
   | 'dictionary'
   | 'labs'
+  | 'bot-access'
 
 export function dispatchOpenRailModal(key: RailModalKey) {
   window.dispatchEvent(new CustomEvent('ui:open-rail-modal', { detail: key }))

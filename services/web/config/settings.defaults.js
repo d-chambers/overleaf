@@ -1225,10 +1225,6 @@ module.exports = {
         __dirname,
         '../modules/zotero/frontend/js/components/zotero-integration-card.tsx'
       ),
-      Path.resolve(
-        __dirname,
-        '../modules/bot-access/frontend/js/components/bot-integration-card.tsx'
-      ),
     ],
     referenceSearchSetting: [],
     settingsModalEditorTabSections: [],
@@ -1243,8 +1239,12 @@ module.exports = {
     ],
     railEntries: [],
     railPopovers: [],
-    railActions: [],
-    railModals: [],
+    railActions: [
+      Path.resolve(__dirname, '../modules/bot-access/frontend/js/rail/bot-rail-action.ts'),
+    ],
+    railModals: [
+      Path.resolve(__dirname, '../modules/bot-access/frontend/js/rail/bot-rail-modal.tsx'),
+    ],
   },
 
   moduleImportSequence: [
