@@ -9,7 +9,16 @@ const allowedResources = process.env.OVERLEAF_LINKED_URL_ALLOWED_RESOURCES
     new RegExp(`^(?:${process.env.OVERLEAF_LINKED_URL_ALLOWED_RESOURCES})`)
   : null
 
+// Optional: no direct egress. Fetch only through this HTTPS proxy, and only
+// URLs starting with one of these prefixes (each should end in "/").
+const httpsProxy = process.env.OVERLEAF_LINKED_URL_HTTPS_PROXY || null
+const allowedUrlPrefixes = (process.env.OVERLEAF_LINKED_URL_ALLOWED_PREFIXES || '')
+  .split(/[,\s]+/)
+  .filter(Boolean)
+
 module.exports = {
+  httpsProxy,
+  allowedUrlPrefixes,
   maxRedirects: 5,
   fetchTimeoutMs: 30000,
   blockedNetworks,

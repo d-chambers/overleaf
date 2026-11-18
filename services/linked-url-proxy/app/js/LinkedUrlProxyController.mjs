@@ -59,6 +59,26 @@ async function checkUrlAccess(hostname, targetUrl) {
   return records[0].address
 }
 
+// Deployments without direct internet access set OVERLEAF_LINKED_URL_HTTPS_PROXY
+// and OVERLEAF_LINKED_URL_ALLOWED_PREFIXES. Then every fetch (and every redirect
+// hop) must be HTTPS under an allowed URL prefix and goes through that proxy,
+// which resolves the hostname itself. Returns the agent, or null if not configured.
+function egressProxyAgent(url) {
+  if (!Settings.httpsProxy) return null
+  const allowed =
+    url.protocol === 'https:' &&
+    (url.port === '' || url.port === '443') &&
+    !url.username &&
+    !url.password &&
+    Settings.allowedUrlPrefixes.some(prefix => url.href.startsWith(prefix))
+  if (!allowed) {
+    const err = new Error('This server can only link files from approved addresses')
+    err.info = { status: 403 }
+    throw err
+  }
+  return new https.Agent({ proxyEnv: { HTTPS_PROXY: Settings.httpsProxy } })
+}
+
 async function validateAndFetch(rawUrl, redirectCount = 0) {
   if (redirectCount > Settings.maxRedirects) {
     const err = new Error('Too many redirects')
@@ -91,6 +111,19 @@ async function validateAndFetch(rawUrl, redirectCount = 0) {
 
   const normalizedUrl = url.toString()
 
+  let agent = egressProxyAgent(url)
+  if (!agent) agent = await pinnedAgent(url, normalizedUrl)
+
+  const opts = {
+    redirect: 'manual',
+    timeout: Settings.fetchTimeoutMs,
+    headers: Settings.userAgentHeader,
+  }
+
+  return await fetchValidated(normalizedUrl, opts, agent, redirectCount)
+}
+
+async function pinnedAgent(url, normalizedUrl) {
   // check DNS and allowed resources
   const validatedIp = await checkUrlAccess(url.hostname, normalizedUrl)
 
@@ -110,17 +143,12 @@ async function validateAndFetch(rawUrl, redirectCount = 0) {
       cb(null, validatedIp, validatedFamily)
     }
   }
-  const agent =
-    url.protocol === 'https:'
-      ? new https.Agent({ lookup: pinnedLookup })
-      : new http.Agent({ lookup: pinnedLookup })
+  return url.protocol === 'https:'
+    ? new https.Agent({ lookup: pinnedLookup })
+    : new http.Agent({ lookup: pinnedLookup })
+}
 
-  const opts = {
-    redirect: 'manual',
-    timeout: Settings.fetchTimeoutMs,
-    headers: Settings.userAgentHeader,
-  }
-
+async function fetchValidated(normalizedUrl, opts, agent, redirectCount) {
   try {
     const { stream, response } = await fetchStreamWithResponse(normalizedUrl, { ...opts, agent })
 
