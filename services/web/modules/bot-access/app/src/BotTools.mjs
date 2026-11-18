@@ -7,6 +7,8 @@ import ChatApiHandler from '../../../../app/src/Features/Chat/ChatApiHandler.mjs
 import ClsiManager from '../../../../app/src/Features/Compile/ClsiManager.mjs'
 import CompileManager from '../../../../app/src/Features/Compile/CompileManager.mjs'
 import DocumentUpdaterHandler from '../../../../app/src/Features/DocumentUpdater/DocumentUpdaterHandler.mjs'
+import EditorController from '../../../../app/src/Features/Editor/EditorController.mjs'
+import SafePath from '../../../../app/src/Features/Project/SafePath.mjs'
 import ProjectEntityHandler from '../../../../app/src/Features/Project/ProjectEntityHandler.mjs'
 import ProjectGetter from '../../../../app/src/Features/Project/ProjectGetter.mjs'
 import LatexParser from '../../../../frontend/js/ide/log-parser/latex-log-parser.ts'
@@ -28,6 +30,12 @@ import {
 
 const MAX_READ_LINES = 2000
 const MAX_EDIT_TEXT = 100 * 1024
+const MAX_NEW_FILE = 512 * 1024
+// create_file only makes text files Overleaf can edit; binaries are uploaded by people.
+const TEXT_EXTENSIONS = new Set([
+  'tex', 'bib', 'bst', 'cls', 'sty', 'clo', 'cfg', 'def', 'dtx', 'ins', 'ist',
+  'bbx', 'cbx', 'lbx', 'txt', 'md', 'csv', 'tsv', 'dat', 'json', 'yaml', 'yml', 'tikz',
+])
 const MAX_REVIEW_CHARS = 100 * 1024
 const MAX_LOG_BYTES = 4 * 1024 * 1024
 const MAX_LOG_ENTRIES = 20
@@ -169,18 +177,36 @@ export const TOOL_DEFINITIONS = [
     },
   },
   {
-    name: 'suggest_edit',
+    name: 'edit_file',
     description:
-      'Suggest replacing one passage of a text file. The change is recorded as a tracked change by this bot for a human to accept or reject; it is never applied directly. old_text must occur exactly once in the file (copy it exactly from read_file, without the line-number prefixes); include more surrounding text if it is not unique. Use an empty new_text to suggest a deletion.',
+      'Replace one passage of a text file. By default (track_changes true) the change is recorded as a tracked change by this bot for a human to accept or reject. Set track_changes to false ONLY when the user has explicitly asked for a direct edit: the change is then applied immediately (still attributed to this bot in the project history). old_text must occur exactly once in the file (copy it exactly from read_file, without the line-number prefixes); include more surrounding text if it is not unique. Use an empty new_text to delete.',
     inputSchema: {
       type: 'object',
       properties: {
         path: { type: 'string', description: 'Project-relative path of a text file.' },
         old_text: { type: 'string', description: 'Exact text to replace; must occur exactly once.' },
         new_text: { type: 'string', description: 'Replacement text (may be empty to delete).' },
+        track_changes: {
+          type: 'boolean',
+          description: 'true (default): record as a tracked change for review. false: apply directly; only when the user explicitly asked for that.',
+        },
         comment: { type: 'string', description: 'Optional explanation, added as a review comment on the new text.' },
       },
       required: ['path', 'old_text', 'new_text'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'create_file',
+    description:
+      'Create a new text file (e.g. a .bib or a chapter .tex) with the given content. It is added directly, not as a tracked change, and cannot overwrite an existing file (use edit_file for that). Folders in the path are created as needed. Only create files the user asked for or that the requested work clearly needs.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        path: { type: 'string', description: 'Project-relative path of the new file, e.g. "references.bib" or "chapters/methods.tex".' },
+        content: { type: 'string', description: 'Full content of the new file.' },
+      },
+      required: ['path', 'content'],
       additionalProperties: false,
     },
   },
@@ -239,7 +265,7 @@ const handlers = {
     const main = docs.find(d => d.id === rootDocId)?.path
     const out = [`Project: ${project.name}`]
     if (main) out.push(`Main file: ${main}`)
-    out.push('', 'Text files (readable, editable via suggest_edit):')
+    out.push('', 'Text files (readable, editable via edit_file):')
     for (const d of [...docs].sort((a, b) => a.path.localeCompare(b.path))) {
       out.push(`- ${d.path}`)
     }
@@ -283,7 +309,11 @@ const handlers = {
     return `${header.join(' ')}\n\n${body.join('\n')}`
   },
 
-  async suggest_edit(ctx, args) {
+  async edit_file(ctx, args) {
+    if (args.track_changes != null && typeof args.track_changes !== 'boolean') {
+      throw new ToolError('track_changes must be true or false.')
+    }
+    const tracked = args.track_changes !== false
     const doc = await resolveDoc(ctx.projectId, args.path)
     const oldText = requireString(args.old_text, 'old_text', { max: MAX_EDIT_TEXT })
     const newText = requireString(args.new_text, 'new_text', {
@@ -327,15 +357,15 @@ const handlers = {
       throw new ToolError('The file changed while the edit was being prepared. Re-read it and try again.')
     }
     try {
-      // document-updater diffs old vs new and applies the difference as
-      // tracked changes attributed to the bot user.
+      // document-updater diffs old vs new and applies the difference,
+      // as tracked changes when `tracked`, attributed to the bot user.
       await DocumentUpdaterHandler.promises.setDocument(
         ctx.projectId,
         doc.id,
         ctx.botUserId,
         updated.split('\n'),
         SOURCE,
-        true
+        tracked
       )
     } catch (err) {
       if (err instanceof RequestFailedError && err.response?.status === 406) {
@@ -345,7 +375,9 @@ const handlers = {
     }
     const line = lineAt(text, at)
     const out = [
-      `Suggested a tracked change in ${doc.path} at line ${line}. It is pending: a human must accept or reject it in the review panel.`,
+      tracked
+        ? `Suggested a tracked change in ${doc.path} at line ${line}. It is pending: a human must accept or reject it in the review panel.`
+        : `Edited ${doc.path} directly at line ${line} (not tracked).`,
     ]
 
     if (comment) {
@@ -365,11 +397,44 @@ const handlers = {
         } catch (err) {
           const e = reviewError(err)
           if (!(e instanceof ToolError)) throw e
-          out.push(`The edit was suggested, but the comment could not be added: ${e.message}`)
+          out.push(`The edit was made, but the comment could not be added: ${e.message}`)
         }
       }
     }
     return out.join(' ')
+  },
+
+  async create_file(ctx, args) {
+    const path = normalisePath(args.path)
+    const content = requireString(args.content, 'content', { max: MAX_NEW_FILE, allowEmpty: true })
+    const parts = path.split('/')
+    if (path.endsWith('/') || parts.some(p => p === '' || p === '.' || p === '..')) {
+      throw new ToolError('path must be a plain project-relative file path such as "references.bib" or "chapters/intro.tex".')
+    }
+    if (!SafePath.isCleanPath(path) || !parts.every(p => SafePath.isCleanFilename(p))) {
+      throw new ToolError('path contains characters Overleaf does not allow in file names.')
+    }
+    const ext = parts.at(-1).includes('.') ? parts.at(-1).split('.').pop().toLowerCase() : ''
+    if (!TEXT_EXTENSIONS.has(ext)) {
+      throw new ToolError(`create_file only makes text files (${[...TEXT_EXTENSIONS].map(e => '.' + e).join(', ')}).`)
+    }
+    const { docs, files } = await getEntities(ctx.projectId)
+    const taken = [...docs, ...files].map(e => e.path)
+    if (taken.includes(path)) {
+      throw new ToolError(`"${path}" already exists. Use edit_file to change it.`)
+    }
+    // A file may not share its path with a folder, nor sit under a file.
+    if (taken.some(t => t.startsWith(path + '/') || path.startsWith(t + '/'))) {
+      throw new ToolError(`"${path}" conflicts with an existing file or folder.`)
+    }
+    await EditorController.promises.upsertDocWithPath(
+      ctx.projectId,
+      '/' + path,
+      content.split('\n'),
+      SOURCE,
+      ctx.botUserId
+    )
+    return `Created ${path} (${content.split('\n').length} lines).`
   },
 
   async comment(ctx, args) {

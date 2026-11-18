@@ -17,7 +17,7 @@ export default function BotIntegrationCard() {
     <>
       <IntegrationCard
         title="Bot"
-        description="Connect an AI assistant that can suggest tracked changes and comment in this project."
+        description="Connect an AI assistant that can edit (tracked by default) and comment in this project."
         icon={<MaterialIcon type="smart_toy" />}
         showPaywallBadge={false}
         onClick={() => setShowModal(true)}

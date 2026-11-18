@@ -148,7 +148,7 @@ export default function BotAccessModal({
           <>
             <Notification
               type="warning"
-              content="Copy this now: the token is shown only once. Anyone with it can suggest changes and comment in this project until you revoke it."
+              content="Copy this now: the token is shown only once. Anyone with it can edit and comment in this project until you revoke it."
             />
             <p className="mt-3">
               <strong>Claude Code</strong> — run this in a terminal on the
@@ -179,10 +179,11 @@ export default function BotAccessModal({
         ) : (
           <>
             <p>
-              A connected bot can read this project&apos;s text files, suggest
-              edits as <strong>tracked changes</strong>, comment, reply to
-              comments and run a compile to read errors. It cannot accept
-              changes, edit directly, change settings, or see other projects.
+              A connected bot can read this project&apos;s text files, edit them
+              (as <strong>tracked changes</strong> unless you ask it to edit
+              directly), create new text files, comment and reply to comments.
+              It cannot accept changes, delete files, upload images, change
+              settings, or see other projects.
             </p>
 
             <form onSubmit={handleCreate}>

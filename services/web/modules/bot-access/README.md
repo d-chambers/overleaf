@@ -2,8 +2,10 @@
 
 Connect an AI assistant ("bot") to **one project**. The bot talks to Overleaf
 over [MCP](https://modelcontextprotocol.io) (Streamable HTTP) at
-`POST /api/v1/bot/mcp`. Everything it writes is a **tracked change** or a
-**comment** that a human reviews; it can never apply or accept a change.
+`POST /api/v1/bot/mcp`. By default its edits are **tracked changes** that a
+human reviews; it is instructed to edit directly (`track_changes: false`) only
+when the user explicitly asks, and it can create new text files. It cannot
+accept, reject or resolve changes, upload binaries, or delete files.
 
 Enable with `OVERLEAF_BOT_ACCESS_ENABLED=true`.
 
@@ -29,7 +31,8 @@ have at most 10 bots.
 | --- | --- | --- |
 | `list_files` | — | Text files (readable/editable) and binary files of the project, and the main file. |
 | `read_file` | `path`, `start_line?`, `end_line?` | Current text with line numbers and doc version, at most 2000 lines per call. Pending tracked insertions are included, pending deletions are not. |
-| `suggest_edit` | `path`, `old_text`, `new_text`, `comment?` | Replaces the single occurrence of `old_text` with `new_text` as a tracked change by the bot. Refused if `old_text` is missing or ambiguous, or if the doc changed between read and write. `comment` is added as a review comment on the new text. |
+| `edit_file` | `path`, `old_text`, `new_text`, `track_changes?` (default `true`), `comment?` | Replaces the single occurrence of `old_text` with `new_text`: as a tracked change by the bot, or directly when `track_changes` is `false`. Refused if `old_text` is missing or ambiguous, or if the doc changed between read and write. |
+| `create_file` | `path`, `content` | Creates a new text file (`.tex`, `.bib`, `.sty`, ...; folders as needed) directly. Never overwrites; binaries are not allowed. |
 | `comment` | `path`, `quote`, `text` | Review comment anchored to the single occurrence of `quote`. |
 | `reply` | `thread_id`, `text` | Reply to a comment thread of this project. |
 | `list_review` | `include_resolved?` | Comment threads (with ids) and pending tracked changes, as Markdown. |
@@ -51,9 +54,11 @@ have at most 10 bots.
 - **Limits.** 600 requests/minute per IP before authentication, 120 per bot
   after. Requests with an `Origin` header from another site are refused
   (DNS-rebinding protection required by the MCP transport spec).
-- **Writes are reviewable.** Edits go through document-updater's set-document
-  path with track changes on, so they appear live in open editors as tracked
-  changes by the bot. The bot has no tool to accept, reject or resolve.
+- **Writes are attributed, and tracked by default.** Edits go through
+  document-updater's set-document path, so they appear live in open editors,
+  attributed to the bot; with `track_changes` (the default) they are tracked
+  changes. Direct edits and new files are recorded in project history under
+  the bot's name. The bot has no tool to accept, reject, resolve or delete.
 - **Compiles are not a security boundary.** In Community Edition compiles run
   inside the main container, and on TeX Live 2026 `openin_any = p` does not
   stop `\openin`/`\input` of absolute or `../` paths (tested). A bot (or any
@@ -63,7 +68,8 @@ have at most 10 bots.
   acceptable.
 - **Prompt injection.** Document text is written by other people; the server
   instructions tell the bot to treat it as content, but a bot can still be
-  misled. Its only effects are reviewable suggestions and comments.
+  misled. Keep direct edits for requests you made yourself; everything the
+  bot does stays in project history.
 
 ## Protocol notes
 
