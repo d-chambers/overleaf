@@ -3,6 +3,7 @@ import IntegrationCard from '@/features/integrations-panel/integration-card'
 import MaterialIcon from '@/shared/components/material-icon'
 import { PermissionsContext } from '@/features/ide-react/context/permissions-context'
 import { useProjectContext } from '@/shared/context/project-context'
+import getMeta from '@/utils/meta'
 import BotAccessModal from './bot-access-modal'
 
 export default function BotIntegrationCard() {
@@ -10,7 +11,9 @@ export default function BotIntegrationCard() {
   const { projectId, name } = useProjectContext()
   const [showModal, setShowModal] = useState(false)
 
-  // Only owners and editors can connect bots (the server enforces this too).
+  // Hidden unless the module is on (OVERLEAF_BOT_ACCESS_ENABLED), and only
+  // owners and editors can connect bots (the server enforces this too).
+  if (!getMeta('ol-ExposedSettings').botAccessEnabled) return null
   if (permissions && !permissions.write) return null
 
   return (

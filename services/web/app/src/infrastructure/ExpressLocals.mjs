@@ -431,6 +431,7 @@ export default async function (webRouter, privateApiRouter, publicApiRouter) {
       giteaUrl: Settings.giteaSync?.url,
       giteaBrand: Settings.giteaSync?.brand,
       giteaTitle: Settings.giteaSync?.title,
+      botAccessEnabled: process.env.OVERLEAF_BOT_ACCESS_ENABLED === 'true',
       zoteroEnabled: !!Settings.zotero?.clientKey && !!Settings.zotero?.clientSecret,
       enablePandocConversions: Settings.enablePandocConversions,
       mixpanelLabsToken:
